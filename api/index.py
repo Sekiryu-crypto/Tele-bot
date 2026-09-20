@@ -1755,7 +1755,6 @@ async def health(request: Request):
 async def index():
     return {"status": "ok", "bot": "group-manager", "hint": "open /api/health to check setup"}
 
-
 app.add_api_route("/webhook", webhook, methods=["POST"])
 app.add_api_route("/setwebhook", set_webhook, methods=["GET"])
 app.add_api_route("/health", health, methods=["GET"])
