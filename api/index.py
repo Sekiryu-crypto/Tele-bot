@@ -1756,11 +1756,7 @@ async def index():
     return {"status": "ok", "bot": "group-manager", "hint": "open /api/health to check setup"}
 
 
-for _p in ("/", "/webhook", "/api", "/api/webhook", "/api/index"):
-    app.add_api_route(_p, webhook, methods=["POST"])
-for _p in ("/setwebhook", "/api/setwebhook"):
-    app.add_api_route(_p, set_webhook, methods=["GET"])
-for _p in ("/health", "/api/health"):
-    app.add_api_route(_p, health, methods=["GET"])
-for _p in ("/", "/api", "/api/index"):
-    app.add_api_route(_p, index, methods=["GET"])
+app.add_api_route("/webhook", webhook, methods=["POST"])
+app.add_api_route("/setwebhook", set_webhook, methods=["GET"])
+app.add_api_route("/health", health, methods=["GET"])
+app.add_api_route("/", index, methods=["GET"])
