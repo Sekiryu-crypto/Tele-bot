@@ -1683,17 +1683,14 @@ async def handle_update(u):
 
 # ───────────────────────────── web routes ─────────────────────────────
 
-# ───────────────────────────── web routes ─────────────────────────────
 
 async def webhook(request: Request):
     if not WEBHOOK_SECRET or request.headers.get("x-telegram-bot-api-secret-token") != WEBHOOK_SECRET:
         return JSONResponse({"ok": False, "error": "forbidden"}, status_code=403)
-
     try:
         update = await request.json()
     except Exception:
         return {"ok": True}
-
     async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
         t1 = _client.set(client)
         t2 = _admin_cache.set({})
@@ -1704,51 +1701,31 @@ async def webhook(request: Request):
         finally:
             _client.reset(t1)
             _admin_cache.reset(t2)
-
-    return {"ok": True}
+    return {"ok": True}  # always 200 so Telegram never retries in a loop
 
 
 async def set_webhook(request: Request, key: str = ""):
     if not WEBHOOK_SECRET or key != WEBHOOK_SECRET:
-        return JSONResponse(
-            {"ok": False, "error": "forbidden — pass ?key=<WEBHOOK_SECRET>"},
-            status_code=403,
-        )
-
+        return JSONResponse({"ok": False, "error": "forbidden — pass ?key=<WEBHOOK_SECRET>"}, status_code=403)
     host = request.headers.get("x-forwarded-host") or request.headers.get("host")
     url = "https://%s/api/webhook" % host
-
     async with httpx.AsyncClient(timeout=20) as c:
-        r = await c.post(
-            API + "/setWebhook",
-            json={
-                "url": url,
-                "secret_token": WEBHOOK_SECRET,
-                "allowed_updates": ALLOWED_UPDATES,
-                "drop_pending_updates": True,
-                "max_connections": 40,
-            },
-        )
-
-        info = await c.post(
-            API + "/setMyCommands",
-            json={
-                "commands": [
-                    {"command": "help", "description": "Show all commands"},
-                    {"command": "rules", "description": "Show the group rules"},
-                    {"command": "notes", "description": "List saved notes"},
-                    {"command": "adminlist", "description": "List group admins"},
-                    {"command": "id", "description": "Show your ID"},
-                    {"command": "report", "description": "Report a message to admins"},
-                ]
-            },
-        )
-
-    return {
-        "webhook_url": url,
-        "telegram": r.json(),
-        "commands": info.json(),
-    }
+        r = await c.post(API + "/setWebhook", json={
+            "url": url,
+            "secret_token": WEBHOOK_SECRET,
+            "allowed_updates": ALLOWED_UPDATES,
+            "drop_pending_updates": True,
+            "max_connections": 40,
+        })
+        info = await c.post(API + "/setMyCommands", json={"commands": [
+            {"command": "help", "description": "Show all commands"},
+            {"command": "rules", "description": "Show the group rules"},
+            {"command": "notes", "description": "List saved notes"},
+            {"command": "adminlist", "description": "List group admins"},
+            {"command": "id", "description": "Show your ID"},
+            {"command": "report", "description": "Report a message to admins"},
+        ]})
+    return {"webhook_url": url, "telegram": r.json(), "commands": info.json()}
 
 
 async def health(request: Request):
@@ -1758,46 +1735,32 @@ async def health(request: Request):
         "redis_url_set": bool(REDIS_URL),
         "redis_token_set": bool(REDIS_TOKEN),
     }
-
     async with httpx.AsyncClient(timeout=10) as client:
         tok = _client.set(client)
-
         try:
-            out["redis_ping"] = (
-                await rcmd("PING")
-                if REDIS_URL and REDIS_TOKEN
-                else "not configured"
-            )
+            out["redis_ping"] = await rcmd("PING") if REDIS_URL and REDIS_TOKEN else "not configured"
         except Exception as e:
             out["redis_ping"] = "error: %s" % e
-
         try:
             me = await tg("getMe")
-            out["telegram"] = (
-                me.get("result", {}).get("username")
-                or me.get("description")
-            )
-
+            out["telegram"] = me.get("result", {}).get("username") or me.get("description")
             wh = await tg("getWebhookInfo")
             out["webhook"] = wh.get("result", {}).get("url")
             out["last_error"] = wh.get("result", {}).get("last_error_message")
         finally:
             _client.reset(tok)
-
     return out
 
 
 async def index():
-    return {
-        "status": "ok",
-        "bot": "group-manager",
-        "hint": "open /api/health to check setup",
-    }
+    return {"status": "ok", "bot": "group-manager", "hint": "open /api/health to check setup"}
 
 
-# Vercel: api/index.py is already mounted under /api
-app.add_api_route("/webhook", webhook, methods=["POST"])
-app.add_api_route("/setwebhook", set_webhook, methods=["GET"])
-app.add_api_route("/health", health, methods=["GET"])
-app.add_api_route("/", index, methods=["GET"])
-
+for _p in ("/", "/webhook", "/api", "/api/webhook", "/api/index"):
+    app.add_api_route(_p, webhook, methods=["POST"])
+for _p in ("/setwebhook", "/api/setwebhook"):
+    app.add_api_route(_p, set_webhook, methods=["GET"])
+for _p in ("/health", "/api/health"):
+    app.add_api_route(_p, health, methods=["GET"])
+for _p in ("/", "/api", "/api/index"):
+    app.add_api_route(_p, index, methods=["GET"])
